@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.IO;
 using System.Text.Json;
+using System.Security.Cryptography;
 
 namespace SystAnalys_lr1
 {
@@ -25,6 +26,15 @@ namespace SystAnalys_lr1
 
         public bool closeApp;
         public bool back;
+
+        // ++
+        List<List<int>> aMatrix;
+        List<List<int>> copyAMatrix;
+        HashSet<int> del;
+        int minD;
+        List<int> dt;
+        List<int> md;
+        // --
 
         public Form1()
         {
@@ -335,6 +345,8 @@ namespace SystAnalys_lr1
         // ++
         private void vertexСonnectivity_Click(object sender, EventArgs e)
         {
+            // createConnectivityMatrix();
+
             if (V.Count == 0)
             {
                 MessageBox.Show("Введите вершину!");
@@ -344,13 +356,19 @@ namespace SystAnalys_lr1
             listBoxMatrix.Items.Clear();
             listBoxMatrix.ForeColor = Color.Black;
 
-            List<VertexVC> listVertex = vertexConnectivity();
+            // List<VertexVC> listVertex = vertexConnectivity();
 
-            listBoxMatrix.Items.Add("Вершинная связность = " + listVertex.Count);
+            vertexConnectivity();
+
+            listBoxMatrix.Items.Add("Вершинная связность = " + minD);
             listBoxMatrix.Items.Add("Точки сочленения:");
-            foreach (VertexVC vertex in listVertex)
+            for (int i = 0; i < V.Count; i++)
             {
-                listBoxMatrix.Items.Add((vertex.index + 1).ToString());
+                if (md[i] != 0)
+                {
+                    listBoxMatrix.Items.Add((i + 1).ToString());
+                    V[i].isVertexConnection = true;
+                }
             }
 
             G.clearSheet();
@@ -374,9 +392,7 @@ namespace SystAnalys_lr1
             return Math.Sqrt((v2.x - v1.x) * (v2.x - v1.x) + (v2.y - v1.y) * (v2.y - v1.y));
         }
 
-
-
-        private List<VertexVC> vertexConnectivity()
+        private List<VertexVC> vertexConnectivity_OLD()
         {
             int countVertex = V.Count;
 
@@ -454,6 +470,186 @@ namespace SystAnalys_lr1
                     result.Add(listVC[edge.v1]);
                 }
             }
+            return result;
+        }
+
+        private void vertexConnectivity()
+        {
+            del = new HashSet<int>();
+            aMatrix = newMatrix(V.Count);
+            createConnectivityMatrix(aMatrix);
+            copyAMatrix = newMatrix(V.Count);
+            copyAMatrix = getCopyMatrix(aMatrix);
+
+            dt = getZeroArray(V.Count);
+            md = getZeroArray(V.Count);
+
+            if (checkMatrix(aMatrix))
+            {
+                minD = V.Count + 1;
+                DFS(0, 0);
+                for (int i = 0; i < V.Count; i++)
+                {
+                    if (md[i] != 0)
+                    {
+                        Console.WriteLine(md[i] + " ");
+                    }
+                }
+                        
+            }
+
+        }
+
+        private void delT(int t)
+        {
+            // memset(a[t], 0, N * sizeof(int));
+            aMatrix[t] = getZeroArray(aMatrix[t].Count);
+            for (int i = 0; i < V.Count; i++)
+                aMatrix[i][t] = 0;
+            del.Add(t);
+        }
+
+        private void setT(int t)
+        {
+            // memmove(a[t], b[t], N * sizeof(int));
+            aMatrix[t] = getCopyArray(copyAMatrix[t]);
+            for (int i = 0; i < V.Count; i++)
+                aMatrix[i][t] = copyAMatrix[i][t];
+            del.Remove(t);
+        }
+
+        private void DFS(int t, int nd)
+        {
+            for (int i = 1; i >= 0; i--)
+            {
+                if (i != 0)
+                    delT(t);
+                else
+                    setT(t);
+                dt[t] = i;
+                if (!checkMatrix(aMatrix))
+                {
+                    minD = nd + i;
+                    // memmove(md, dt, N * sizeof(int));
+                    md = getCopyArray(dt);
+                }
+                else
+                {
+                    if (nd + i < minD && t + 1 < V.Count)
+                        DFS(t + 1, nd + i);
+                }
+            }
+        }
+
+        private List<List<int>> newMatrix(int length)
+        {
+            List<List<int>> result = new List<List<int>>();
+            for (int i = 0; i < length; i++)
+            {
+                List<int> list = new List<int>();
+                for (int j = 0; j < length + 1; j++)
+                {
+                    list.Add(0);
+                }
+                result.Add(list);  
+            }
+            return result;
+        }
+
+        private bool checkMatrix(List<List<int>> matrix)
+        {
+            List<List<int>> copyMatrix = getCopyMatrix(matrix);
+
+            int begin = -1;
+            int count = V.Count;
+            for (int i = 0; i < count; i++)
+            {
+                copyMatrix[i][count] = 0;
+                if (begin < 0 && !del.Contains(i))
+                    begin = i;
+            }
+
+            if (begin < 0)
+                return true;
+
+            Queue<int> queue = new Queue<int>();
+            queue.Enqueue(begin);
+            copyMatrix[begin][count] = 1;
+
+            while (queue.Count != 0)
+            {
+                int index = queue.Dequeue();
+                copyMatrix[index][count] = 1;
+
+                for (int i = 0; i < count; i++)
+                {
+                    if (copyMatrix[index][i] != 0 && copyMatrix[i][count] == 0)
+                    {
+                        queue.Enqueue(i);
+                        copyMatrix[i][count] = 1;
+                    }
+                }
+            }
+
+            for (int i = 0; i < count; i++)
+            {
+                if (!del.Contains(i) && copyMatrix[i][count] == 0)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private void createConnectivityMatrix(List<List<int>> matrix)
+        {
+            for (int i = 0; i < V.Count; i++) 
+            { 
+                for (int j = 0; j < V.Count; j++) 
+                {
+                    matrix[i][j] = 0;
+                }   
+            }
+
+            foreach (Edge edge in E)
+            {
+                matrix[edge.v1][edge.v2] = 1;
+                matrix[edge.v2][edge.v1] = 1;
+            }
+        }
+
+        private List<List<int>> getCopyMatrix(List<List<int>> matrix)
+        {
+            List<List<int>> result = new List<List<int>>();
+
+            foreach (List<int> currentList in matrix)
+            {
+                List<int> list = new List<int>();
+                foreach (int value in currentList)
+                {
+                    list.Add(value);
+                }    
+                result.Add(list);
+            }
+
+            return result;
+        }
+
+        private List<int> getCopyArray(List<int> array)
+        {
+            List<int> result = new List<int>();
+            foreach (int value in array)
+                result.Add(value);
+
+            return result;
+        }
+
+        private List<int> getZeroArray(int arrayLength)
+        {
+            List<int> result = new List<int>();
+            for (int i = 0; i < arrayLength; i++)
+                result.Add(0);   
+
             return result;
         }
 
